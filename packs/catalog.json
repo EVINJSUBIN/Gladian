@@ -1,0 +1,5 @@
+[
+  { "id": "first-page", "name": "First Page" },
+  { "id": "dice-roller", "name": "Dice Roller" },
+  { "id": "todo-list", "name": "Todo List" }
+]

@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "id": "array",
+      "title": "Keep a list in memory",
+      "body": "Create an array named tasks. It can start empty.",
+      "docId": "js-arrays",
+      "file": "index.html",
+      "contains": ["tasks", "["]
+    },
+    {
+      "id": "render",
+      "title": "Draw the list",
+      "body": "Find the ul with id list and write a function that turns the tasks array into li elements inside it.",
+      "docId": "js-dom",
+      "file": "index.html",
+      "contains": ["list", "li"]
+    },
+    {
+      "id": "add",
+      "title": "Add what you typed",
+      "body": "On a click of the button with id add, read the input with id task, store that text, and show it in the list.",
+      "docId": "js-events",
+      "file": "index.html",
+      "contains": ["addEventListener", "task"],
+      "probe": "todo"
+    }
+  ]
+}

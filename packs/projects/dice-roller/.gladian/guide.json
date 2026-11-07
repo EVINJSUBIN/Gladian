@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "id": "function",
+      "title": "Name the roll",
+      "body": "In the script, declare a function named rollDie. It does not need to return the right number yet.",
+      "docId": "js-functions",
+      "file": "index.html",
+      "contains": ["function rollDie"]
+    },
+    {
+      "id": "return",
+      "title": "Return 1 through 6",
+      "body": "Use Math.random and Math.floor so rollDie returns 1, 2, 3, 4, 5, or 6. The functions article has the shape. The arithmetic is yours.",
+      "docId": "js-functions",
+      "file": "index.html",
+      "contains": ["return", "Math."]
+    },
+    {
+      "id": "click",
+      "title": "Show the roll",
+      "body": "Listen for a click on the button with id roll. Call rollDie and put the number in the paragraph with id result.",
+      "docId": "js-events",
+      "file": "index.html",
+      "contains": ["addEventListener"],
+      "probe": "dice"
+    }
+  ]
+}

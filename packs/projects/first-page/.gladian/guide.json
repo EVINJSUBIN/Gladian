@@ -1,0 +1,28 @@
+{
+  "steps": [
+    {
+      "id": "heading",
+      "title": "Name the page",
+      "body": "Inside the body, add an h1 whose text is your name. The heading article shows the shape of the tag. You choose the words.",
+      "docId": "html-text",
+      "file": "index.html",
+      "contains": ["<h1", "</h1>"]
+    },
+    {
+      "id": "bio",
+      "title": "Say something about you",
+      "body": "Add a paragraph under the heading. One or two sentences is enough.",
+      "docId": "html-text",
+      "file": "index.html",
+      "contains": ["<p", "</p>"]
+    },
+    {
+      "id": "color",
+      "title": "Give it a color",
+      "body": "In the style block, set a background color on the body. Pick any color you like.",
+      "docId": "css-color",
+      "file": "index.html",
+      "contains": ["background"]
+    }
+  ]
+}
