@@ -41,9 +41,11 @@ Gladian rewards genuine effort. As learners read documentation, fix syntax bugs,
 ### 3. Automated Headless DOM Probing
 Step verification doesn't just match strings. Gladian spins up an isolated, headless `<iframe>` probe that programmatically interacts with the learner's DOM (e.g., clicking `#roll` and asserting random bounds $1..6$, or adding a todo item and verifying list mutation) to verify runtime behavior.
 
-### 4. Offline Documentation & Documentation Crawler
-- Bundled offline documentation covering HTML, CSS, JavaScript, and Python.
-- Built-in crawler that fetches and sanitizes documentation from any URL, stripping HTML boilerplate and indexing articles into **MiniSearch** for lightning-fast offline search.
+### 4. Comprehensive Offline Documentation & AI Simplification
+- **Extensive Built-in Guides**: Complete, offline-ready reference documentation with real code examples and commands for **Flask**, **Django**, **FastAPI**, **Pygame**, **Requests**, **Node.js**, and **Next.js**.
+- **URL Scraper & Raw Document Viewer**: Scrape documentation from any web URL directly into your offline library with raw page viewing.
+- **AI-Powered Simplification Engine**: With an Anthropic API key, transform raw scraped documentation into structured, easy-to-digest learning modules with real code snippets, key takeaways, and hands-on exercises.
+- **Offline Persistence**: Once simplified, all modules and raw articles are permanently saved to disk (`libraries/*.json`) so they remain fully accessible offline.
 
 ### 5. Multi-Runtime Architecture
 Gladian supports both **Electron 37** (cross-platform desktop integration with OS `safeStorage`) and **Tauri v2** (ultra-lightweight Rust backend with native system dialogs and sandboxed scanning), as well as a standalone web mode with `localStorage` persistence.

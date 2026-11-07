@@ -1,3 +1,4 @@
+import type { DocModule } from './catalog'
 import type { Article } from './content'
 import type { Hint } from './coach'
 import firstHtml from '../../../packs/projects/first-page/index.html?raw'
@@ -15,6 +16,8 @@ export type Library = {
   monacoLanguage?: string
   articles: Article[]
   hints: Hint[]
+  modules?: DocModule[]
+  simplifiedAt?: string
 }
 export type Progress = {
   xp: number
@@ -284,5 +287,13 @@ export async function reviewReading(input: { docs: string; files: ScanFile[] }) 
     return await tauri<ReadingNote>('review_reading', { input })
   } catch (reason) {
     throw lift(reason, 'The folder was not read.')
+  }
+}
+export async function simplifyLibrary(libraryId: string): Promise<Library> {
+  if (!inTauri()) throw new Error('AI simplification needs the Gladian desktop window.')
+  try {
+    return await tauri<Library>('simplify_library', { libraryId })
+  } catch (reason) {
+    throw lift(reason, 'The documentation could not be simplified.')
   }
 }

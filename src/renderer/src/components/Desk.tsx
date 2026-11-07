@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { CATALOG, modulesOf, type CatalogLibrary, type StudyPage } from '../catalog'
+import { CATALOG, modulesOf, type CatalogLibrary, type DocModule, type StudyPage } from '../catalog'
 import { explainError, type ErrorNote } from '../explain'
 import { addHighlight, loadMarks, toggleBookmark, type Bookmark, type Highlight } from '../marks'
 import {
@@ -14,6 +14,7 @@ import {
   runPractice,
   saveApiKey,
   scanProject,
+  simplifyLibrary,
   storeProjects,
   watchDocProgress,
   type DocProgress,
@@ -83,11 +84,42 @@ export function Desk() {
   const [note, setNote] = useState<ErrorNote | null>(null)
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [highlights, setHighlights] = useState<Highlight[]>([])
+  const [showSimplified, setShowSimplified] = useState(true)
 
   const builtIn = CATALOG.find((library) => library.id === (selection.kind === 'library' ? selection.id : '')) ?? null
   const added = imported.find((library) => library.id === (selection.kind === 'library' ? selection.id : '')) ?? null
   const project = projects.find((item) => selection.kind === 'project' && item.id === selection.id) ?? null
-  const pages: StudyPage[] = builtIn?.pages ?? (added?.articles ?? []).map((article) => ({ id: article.id, title: article.title, body: article.body, tryIt: article.tryIt }))
+
+  const activeModules: DocModule[] = useMemo(() => {
+    if (builtIn) return modulesOf(builtIn)
+    if (added) {
+      if (added.modules && added.modules.length > 0 && showSimplified) {
+        return added.modules
+      }
+      return [
+        {
+          id: 'raw-pages',
+          title: 'Raw Scraped Pages',
+          sections: (added.articles ?? []).map((article) => ({
+            id: article.id,
+            title: article.title,
+            body: article.body,
+            tryIt: article.tryIt
+          }))
+        }
+      ]
+    }
+    return []
+  }, [builtIn, added, showSimplified])
+
+  const pages: StudyPage[] = useMemo(() => {
+    if (builtIn) return builtIn.pages
+    if (added) {
+      return activeModules.flatMap((module) => module.sections)
+    }
+    return []
+  }, [builtIn, added, activeModules])
+
   const page = pages.find((item) => item.id === pageId) ?? pages[0] ?? null
 
   useEffect(() => {
@@ -114,7 +146,12 @@ export function Desk() {
 
   function openLibrary(library: CatalogLibrary | Library) {
     setSelection({ kind: 'library', id: library.id })
-    const first = 'pages' in library ? library.pages[0] : library.articles[0]
+    const isSimplified = 'modules' in library && Boolean(library.modules && library.modules.length > 0)
+    const first = 'pages' in library
+      ? library.pages[0]
+      : isSimplified && library.modules && library.modules.length > 0
+      ? library.modules[0].sections[0]
+      : library.articles[0]
     setPageId(first?.id ?? '')
     setError('')
     setOutput('')
@@ -147,6 +184,28 @@ export function Desk() {
     } finally {
       setBusy('')
       setProgress(null)
+    }
+  }
+
+  async function handleSimplify() {
+    if (!added) return
+    if (!online || !hasKey) {
+      setError('Simplifying documentation with AI needs an internet connection and an API key.')
+      return
+    }
+    setBusy('simplify')
+    setError('')
+    try {
+      const updated = await simplifyLibrary(added.id)
+      setImported((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      setShowSimplified(true)
+      if (updated.modules && updated.modules.length > 0) {
+        setPageId(updated.modules[0].sections[0]?.id ?? '')
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The documentation could not be simplified.')
+    } finally {
+      setBusy('')
     }
   }
 
@@ -270,12 +329,15 @@ export function Desk() {
           </button>
         ))}
         {imported.length > 0 && <h2>Saved from a URL</h2>}
-        {imported.map((library) => (
-          <button key={library.id} className="file" type="button" aria-current={added?.id === library.id ? 'true' : undefined} onClick={() => openLibrary(library)}>
-            <strong>{library.name}</strong>
-            <span className="muted">Saved document</span>
-          </button>
-        ))}
+        {imported.map((library) => {
+          const isSimplified = Boolean(library.modules && library.modules.length > 0)
+          return (
+            <button key={library.id} className="file" type="button" aria-current={added?.id === library.id ? 'true' : undefined} onClick={() => openLibrary(library)}>
+              <strong>{library.name}</strong>
+              <span className="muted">{isSimplified ? 'AI Guide · Offline' : `${library.articles.length} raw pages`}</span>
+            </button>
+          )
+        })}
         <form className="stack add-doc" onSubmit={(event) => void saveUrl(event)}>
           <h2>Add documentation</h2>
           <label>
@@ -358,60 +420,80 @@ export function Desk() {
           </article>
         ) : pages.length > 0 ? (
           <article className="page" key={builtIn?.id ?? added?.id}>
-            <p className="eyebrow">{builtIn?.name ?? added?.name}</p>
+            <p className="eyebrow">
+              {builtIn
+                ? builtIn.name
+                : added?.modules && added.modules.length > 0 && showSimplified
+                ? `${added.name} · AI Simplified Guide`
+                : `${added?.name} · Raw Documentation`}
+            </p>
             <h2>{builtIn?.name ?? added?.name}</h2>
-            <p>{builtIn?.summary ?? 'Saved pages from the URL you added. They stay on this computer.'}</p>
+            <p>
+              {builtIn?.summary ??
+                (added?.modules && added.modules.length > 0 && showSimplified
+                  ? `Structured learning modules with runnable code snippets generated from ${added.sourceUrl || 'documentation'}. Cached offline.`
+                  : `Saved raw documentation pages from ${added?.sourceUrl || 'URL'}. Cached on this computer.`)}
+            </p>
             <nav className="module-nav" aria-label="Modules">
-              {(builtIn ? modulesOf(builtIn) : [{ id: 'saved', title: 'Saved', sections: pages }]).map((module) => (
+              {activeModules.map((module) => (
                 <a key={module.id} href={`#${module.id}`}>
                   {module.title}
                 </a>
               ))}
             </nav>
-            {(builtIn ? modulesOf(builtIn) : [{ id: 'saved', title: 'Saved', sections: pages }]).map((module) => (
+            {activeModules.map((module) => (
               <section key={module.id} id={module.id} className="module">
                 <h2>{module.title}</h2>
                 {module.sections.map((item) => {
-                  const marked = highlights.filter((entry) => entry.libraryId === (builtIn?.id ?? added?.id) && entry.sectionId === item.id).map((entry) => entry.text)
-                  const saved = bookmarks.some((entry) => entry.libraryId === (builtIn?.id ?? '') && entry.sectionId === item.id)
+                  const currentLibId = builtIn?.id ?? added?.id ?? ''
+                  const marked = highlights.filter((entry) => entry.libraryId === currentLibId && entry.sectionId === item.id).map((entry) => entry.text)
+                  const saved = bookmarks.some((entry) => entry.libraryId === currentLibId && entry.sectionId === item.id)
                   return (
                     <section className="guide-block" id={item.id} key={item.id}>
                       <div className="guide-tools">
                         <h3>{item.title}</h3>
-                        {builtIn && (
-                          <button
-                            className="ghost"
-                            type="button"
-                            onClick={() => {
-                              const next = toggleBookmark({ libraryId: builtIn.id, sectionId: item.id, title: `${builtIn.name}: ${item.title}` })
-                              setBookmarks(next.bookmarks)
-                            }}
-                          >
-                            {saved ? 'Bookmarked' : 'Bookmark'}
-                          </button>
-                        )}
-                        {builtIn && (
-                          <button
-                            className="ghost"
-                            type="button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              const text = window.getSelection()?.toString() ?? ''
-                              const next = addHighlight({ libraryId: builtIn.id, sectionId: item.id, text })
-                              setHighlights(next.highlights)
-                            }}
-                          >
-                            Highlight
-                          </button>
-                        )}
+                        <button
+                          className="ghost"
+                          type="button"
+                          onClick={() => {
+                            const next = toggleBookmark({ libraryId: currentLibId, sectionId: item.id, title: `${builtIn?.name ?? added?.name}: ${item.title}` })
+                            setBookmarks(next.bookmarks)
+                          }}
+                        >
+                          {saved ? 'Bookmarked' : 'Bookmark'}
+                        </button>
+                        <button
+                          className="ghost"
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            const text = window.getSelection()?.toString() ?? ''
+                            const next = addHighlight({ libraryId: currentLibId, sectionId: item.id, text })
+                            setHighlights(next.highlights)
+                          }}
+                        >
+                          Highlight
+                        </button>
                       </div>
-                      {item.body.split('\n\n').map((paragraph) => (
-                        <p key={paragraph}>
-                          {paint(paragraph, marked).map((part, index) =>
-                            typeof part === 'string' ? <span key={index}>{part}</span> : <mark key={index}>{part.mark}</mark>
-                          )}
-                        </p>
-                      ))}
+                      {item.body.split('\n\n').map((paragraph, pIdx) => {
+                        const trimmed = paragraph.trim()
+                        if (trimmed.startsWith('```') && trimmed.endsWith('```')) {
+                          const lines = trimmed.split('\n')
+                          const codeBody = lines.slice(1, lines.length - 1).join('\n')
+                          return (
+                            <pre key={pIdx}>
+                              <code>{codeBody}</code>
+                            </pre>
+                          )
+                        }
+                        return (
+                          <p key={pIdx}>
+                            {paint(paragraph, marked).map((part, index) =>
+                              typeof part === 'string' ? <span key={index}>{part}</span> : <mark key={index}>{part.mark}</mark>
+                            )}
+                          </p>
+                        )
+                      })}
                       <p className="try-line">{item.tryIt}</p>
                     </section>
                   )
@@ -535,10 +617,73 @@ export function Desk() {
               </div>
             )}
           </div>
+        ) : added ? (
+          <div className="stack">
+            <h2>{added.name}</h2>
+            <p>Saved from {added.sourceUrl || 'URL'}. Available offline.</p>
+            {added.modules && added.modules.length > 0 ? (
+              <section className="flat">
+                <h3>AI Simplified Guide</h3>
+                <p className="ok">Simplified with AI & cached offline.</p>
+                <div style={{ display: 'flex', gap: '8px', margin: '8px 0' }}>
+                  <button
+                    className={showSimplified ? 'btn' : 'ghost'}
+                    type="button"
+                    onClick={() => setShowSimplified(true)}
+                  >
+                    Simplified Guide
+                  </button>
+                  <button
+                    className={!showSimplified ? 'btn' : 'ghost'}
+                    type="button"
+                    onClick={() => setShowSimplified(false)}
+                  >
+                    Raw Pages ({added.articles.length})
+                  </button>
+                </div>
+                {online && hasKey && (
+                  <button
+                    className="ghost"
+                    type="button"
+                    disabled={busy === 'simplify'}
+                    onClick={() => void handleSimplify()}
+                  >
+                    {busy === 'simplify' ? 'Re-simplifying with AI…' : 'Re-simplify with AI'}
+                  </button>
+                )}
+              </section>
+            ) : (
+              <section className="flat">
+                <h3>AI Simplification</h3>
+                <p>This documentation currently has {added.articles.length} raw scraped page{added.articles.length === 1 ? '' : 's'}. Use your Claude API key to convert them into structured, easy-to-read learning modules with code snippets and exercises.</p>
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={!online || !hasKey || busy === 'simplify'}
+                  onClick={() => void handleSimplify()}
+                >
+                  {busy === 'simplify' ? 'Simplifying with AI…' : 'Simplify with AI'}
+                </button>
+                {!hasKey && (
+                  <p className="help">
+                    Add an API key below to unlock AI documentation simplification.
+                  </p>
+                )}
+                {!online && (
+                  <p className="help">
+                    Simplification requires internet access. Once converted, the guide works offline.
+                  </p>
+                )}
+              </section>
+            )}
+            <button className="ghost" type="button" onClick={() => setKeyOpen(true)}>
+              {hasKey ? 'API key saved' : 'Add API key'}
+            </button>
+          </div>
         ) : (
           <div className="stack">
             <h2>Saved pages</h2>
-            <p>This document was saved from a URL. It stays readable offline. It does not include a built-in exercise.</p>
+            <p>This document was saved from a URL. It stays readable offline.</p>
           </div>
         )}
         {error && <p className="error">{error}</p>}
@@ -554,6 +699,8 @@ export function Desk() {
               Saving {progress.title}, page {progress.done} of {progress.total}
             </span>
           </span>
+        ) : busy === 'simplify' ? (
+          <span>Simplifying documentation with AI… this may take a moment</span>
         ) : (
           <span>{page?.title ?? project?.name ?? 'Gladian'}</span>
         )}
@@ -573,7 +720,7 @@ export function Desk() {
           }}
         >
           <h2>API key</h2>
-          <p>The key stays on this computer. Plans and reading notes need it. Documents do not.</p>
+          <p>The key stays on this computer. Plans, reading notes, and AI doc simplification need it. Saved documents open without it.</p>
           <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" />
           <button className="btn" type="submit">
             Save key
