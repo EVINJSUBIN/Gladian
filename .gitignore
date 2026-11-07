@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Secrets & Environment
+.env
+.env.*
+secret.bin
+claude-key
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# System & OS
+.DS_Store
+Thumbs.db
+
+# IDEs & Editor caches
+.cursor/
+.agents/
+.vscode/
+.idea/

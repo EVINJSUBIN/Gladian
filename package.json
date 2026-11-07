@@ -1,0 +1,44 @@
+{
+  "name": "gladian",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev:web": "vite",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "dev:electron": "electron-vite dev",
+    "build:web": "vite build",
+    "build:electron": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
+    "@fontsource/atkinson-hyperlegible": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@monaco-editor/react": "^4.7.0",
+    "acorn": "^8.15.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.544.0",
+    "minisearch": "^7.1.2",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "@tauri-apps/api": "^2.8.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron": "^37.3.1",
+    "electron-vite": "^4.0.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5"
+  }
+}
