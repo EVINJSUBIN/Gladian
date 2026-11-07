@@ -3,11 +3,17 @@
 > **An offline-first, pedagogical desktop IDE where the learner writes every line of the lesson.**  
 > *Built for Hack Club Crescent (YSWS).*
 
+[![Live Web App](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-22c55e.svg)](https://evinjsubin.github.io/Gladian/)
+[![Windows Executable](https://img.shields.io/badge/Download-Windows%20.exe-0ea5e9.svg)](https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
-[![Electron](https://img.shields.io/badge/Electron-37-47848F.svg)](https://www.electronjs.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-FFC131.svg)](https://tauri.app/)
+
+### 🚀 Try It Now:
+- **🌐 Live Web App**: [https://evinjsubin.github.io/Gladian/](https://evinjsubin.github.io/Gladian/)
+- **💾 Windows Standalone .exe**: [Gladian.exe (v0.1.0 Release)](https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0)
+- **📦 Compressed Archive**: [Gladian-v0.1.0-windows-x64.zip](https://github.com/EVINJSUBIN/Gladian/releases/download/v0.1.0/Gladian-v0.1.0-windows-x64.zip)
 
 ---
 
@@ -175,7 +181,7 @@ npm run build
 
 - **Hackatime Tracking**: Time logged under this project reflects the end-to-end engineering cycle: architectural redesign, migrating from Electron-only to hybrid Tauri/Electron/Web, implementing client-side AST inspection, writing sandboxed DOM verification runners, and conducting thorough security reviews.
 - **Code Authorship & AI Usage**: While LLMs were used for planning and scaffolding boilerplate interfaces, the core mechanics—deterministic Acorn parsing, security isolation boundaries, path traversal guards, subprocess sandboxing, and progressive unlock systems—were manually designed, coded, and verified.
-- **Verification**: You can test the application live in browser mode via `npm run dev:web` or build the full desktop app via `npm run dev:electron` / `npm run dev`.
+- **Verification**: You can test the application instantly via the [Live Web App](https://evinjsubin.github.io/Gladian/) or download the standalone Windows executable [Gladian.exe](https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0) without needing any local build environment. If running from source, execute `npm run dev:web` or `npm run dev`.
 
 ---
 
