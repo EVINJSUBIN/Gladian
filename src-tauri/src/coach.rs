@@ -115,7 +115,7 @@ pub fn save_projects(app: &AppHandle, projects: &[StudyProject]) -> Result<(), S
     fs::write(path, serde_json::to_string_pretty(projects).map_err(|error| error.to_string())?).map_err(|error| error.to_string())
 }
 
-fn ask_model(app: &AppHandle, prompt: &str) -> Result<String, String> {
+pub fn ask_model(app: &AppHandle, prompt: &str) -> Result<String, String> {
     let key = read_key(app)?;
     let body = serde_json::json!({
         "model": MODEL,
@@ -155,7 +155,7 @@ fn ask_model(app: &AppHandle, prompt: &str) -> Result<String, String> {
     Ok(out)
 }
 
-fn parse_json(text: &str) -> Result<serde_json::Value, String> {
+pub fn parse_json(text: &str) -> Result<serde_json::Value, String> {
     let trimmed = text.trim();
     let body = trimmed
         .strip_prefix("```json")

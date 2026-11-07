@@ -21,6 +21,23 @@ struct Article {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct DocSection {
+    id: String,
+    title: String,
+    body: String,
+    try_it: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DocModule {
+    id: String,
+    title: String,
+    sections: Vec<DocSection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SavedLibrary {
     id: String,
     name: String,
@@ -28,6 +45,10 @@ struct SavedLibrary {
     articles: Vec<Article>,
     #[serde(default)]
     hints: Vec<String>,
+    #[serde(default)]
+    modules: Vec<DocModule>,
+    #[serde(default)]
+    simplified_at: Option<String>,
 }
 
 fn libraries_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -214,6 +235,8 @@ fn import_pages(app: &AppHandle, start: &str, crawl: bool) -> Result<SavedLibrar
         source_url: first.to_string(),
         articles,
         hints: Vec::new(),
+        modules: Vec::new(),
+        simplified_at: None,
     })
 }
 
@@ -362,6 +385,73 @@ fn import_url(app: AppHandle, url: String, crawl: bool) -> Result<SavedLibrary, 
     Ok(library)
 }
 
+#[tauri::command]
+fn simplify_library(app: AppHandle, library_id: String) -> Result<SavedLibrary, String> {
+    let dir = libraries_dir(&app)?;
+    let path = dir.join(format!("{library_id}.json"));
+    if !path.exists() {
+        return Err(format!("Library '{library_id}' was not found on this computer."));
+    }
+    let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let mut library: SavedLibrary = serde_json::from_str(&text).map_err(|error| error.to_string())?;
+    if library.articles.is_empty() {
+        return Err("This library has no pages to simplify.".to_string());
+    }
+    // Build the raw text for Claude - cap at 14000 chars to stay under token limits
+    let mut raw = String::new();
+    for article in library.articles.iter().take(20) {
+        raw.push_str(&format!("## {}\n{}\n\n", article.title, article.body));
+        if raw.len() > 14_000 {
+            break;
+        }
+    }
+    let raw = raw.chars().take(14_000).collect::<String>();
+    let prompt = format!(
+        "You convert raw documentation text into structured learning modules.\nReturn ONLY valid JSON - no markdown fences, no commentary, just the JSON array.\nShape: [{{\"id\":\"module-id\",\"title\":\"Module Title\",\"sections\":[{{\"id\":\"section-id\",\"title\":\"Section Title\",\"body\":\"Explanation with real code examples. Use \\\\n for newlines inside strings.\",\"tryIt\":\"One concrete hands-on exercise.\"}}]}}]\n\nRules:\n- Extract REAL code examples from the source text and embed them in body\n- Use \\\\n (not actual newlines) inside JSON string values\n- Each section teaches ONE concept with a real code snippet if present\n- tryIt must be a concrete hands-on task\n- Maximum 6 modules, maximum 4 sections each\n- Code examples must be actual runnable code, not pseudocode\n- Keep body under 400 words per section\n- Do not invent APIs that do not appear in the source\n- Library name: {}\n- Source URL: {}\n\nRaw documentation text:\n{}",
+        library.name,
+        library.source_url,
+        raw
+    );
+    let reply = coach::ask_model(&app, &prompt)?;
+    let value = coach::parse_json(&reply)?;
+    let arr = value
+        .as_array()
+        .ok_or_else(|| "The reply was not a JSON array.".to_string())?;
+    let mut modules: Vec<DocModule> = Vec::new();
+    for item in arr.iter().take(6) {
+        let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("module").to_string();
+        let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("Module").to_string();
+        let sections_raw = item.get("sections").and_then(|v| v.as_array());
+        let mut sections: Vec<DocSection> = Vec::new();
+        if let Some(sects) = sections_raw {
+            for sect in sects.iter().take(4) {
+                let sid = sect.get("id").and_then(|v| v.as_str()).unwrap_or("section").to_string();
+                let stitle = sect.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let body = sect.get("body").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let try_it = sect.get("tryIt").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                if !stitle.is_empty() {
+                    sections.push(DocSection { id: sid, title: stitle, body, try_it });
+                }
+            }
+        }
+        if !title.is_empty() && !sections.is_empty() {
+            modules.push(DocModule { id, title, sections });
+        }
+    }
+    if modules.is_empty() {
+        return Err("The simplification produced no modules. Try again or check the API key.".to_string());
+    }
+    library.modules = modules;
+    library.simplified_at = Some(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_else(|_| "0".to_string()),
+    );
+    fs::write(&path, serde_json::to_string_pretty(&library).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    Ok(library)
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -377,7 +467,8 @@ pub fn run() {
             list_projects,
             save_projects,
             draft_plan,
-            review_reading
+            review_reading,
+            simplify_library
         ])
         .run(tauri::generate_context!())
         .expect("error while running Gladian");
