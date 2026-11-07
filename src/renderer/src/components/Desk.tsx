@@ -1,5 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
+import {
+  BookOpen,
+  Bookmark as BookmarkIcon,
+  Check,
+  Copy,
+  ExternalLink,
+  FileCode2,
+  FolderCode,
+  Key,
+  Play,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Wifi,
+  WifiOff,
+  Zap
+} from 'lucide-react'
 import { CATALOG, modulesOf, type CatalogLibrary, type DocModule, type StudyPage } from '../catalog'
 import { explainError, type ErrorNote } from '../explain'
 import { addHighlight, loadMarks, toggleBookmark, type Bookmark, type Highlight } from '../marks'
@@ -57,6 +74,119 @@ function docsFor(ids: string[]) {
     .flatMap((library) => library.pages.map((page) => `# ${library.name} / ${page.title}\n${page.body}`))
     .join('\n\n')
     .slice(0, 8000)
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      className="doc-code-copy"
+      type="button"
+      title="Copy code"
+      aria-label="Copy code to clipboard"
+      onClick={() => {
+        void navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1600)
+      }}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  )
+}
+
+function renderFormattedParagraph(text: string, marked: string[]) {
+  if (text.includes('`')) {
+    const segments = text.split(/(`[^`]+`)/g)
+    return segments.map((seg, i) => {
+      if (seg.startsWith('`') && seg.endsWith('`') && seg.length > 2) {
+        return (
+          <code key={i} className="inline-code">
+            {seg.slice(1, -1)}
+          </code>
+        )
+      }
+      return paint(seg, marked).map((part, index) =>
+        typeof part === 'string' ? <span key={index}>{part}</span> : <mark key={index}>{part.mark}</mark>
+      )
+    })
+  }
+  return paint(text, marked).map((part, index) =>
+    typeof part === 'string' ? <span key={index}>{part}</span> : <mark key={index}>{part.mark}</mark>
+  )
+}
+
+function DocContent({ body, marked }: { body: string; marked: string[] }) {
+  const rendered = useMemo(() => {
+    // 1. If body contains triple backtick code blocks
+    if (body.includes('```')) {
+      const segments = body.split(/(```[\s\S]*?```)/g)
+      return segments.filter((seg) => seg.trim()).map((seg, idx) => {
+        const trimmed = seg.trim()
+        if (trimmed.startsWith('```') && trimmed.endsWith('```')) {
+          const lines = trimmed.slice(3, -3).trim().split('\n')
+          let lang = 'python'
+          let codeLines = lines
+          if (lines[0] && /^[a-zA-Z0-9_-]+$/.test(lines[0].trim())) {
+            lang = lines[0].trim()
+            codeLines = lines.slice(1)
+          }
+          const code = codeLines.join('\n')
+          return (
+            <div className="doc-code-block" key={idx}>
+              <div className="doc-code-header">
+                <span className="doc-code-lang">{lang}</span>
+                <CopyButton text={code} />
+              </div>
+              <pre className="doc-code-pre">
+                <code>{code}</code>
+              </pre>
+            </div>
+          )
+        }
+        return seg.split(/\n\n+/).filter((p) => p.trim()).map((paragraph, pIdx) => (
+          <p key={`${idx}-${pIdx}`} className="doc-paragraph">
+            {renderFormattedParagraph(paragraph.trim(), marked)}
+          </p>
+        ))
+      })
+    }
+
+    // 2. Fallback: split by double newlines & detect unfenced code
+    return body.split(/\n\n+/).filter((p) => p.trim()).map((paragraph, pIdx) => {
+      const trimmed = paragraph.trim()
+      const lines = trimmed.split('\n')
+      const isUnfencedCode =
+        lines.some((l) =>
+          /^(from |import |def |class |@app\.|return |urlpatterns =|pip |python |django-admin |flask |npx |npm |const |let |var |<[a-z]+>)/i.test(l.trim())
+        ) && lines.length > 1
+
+      if (isUnfencedCode) {
+        const isBash = /^(pip |python |django-admin |flask |npx |npm |cd |source |venv)/i.test(lines[0].trim())
+        const lang = isBash ? 'bash' : 'python'
+        return (
+          <div className="doc-code-block" key={pIdx}>
+            <div className="doc-code-header">
+              <span className="doc-code-lang">{lang}</span>
+              <CopyButton text={trimmed} />
+            </div>
+            <pre className="doc-code-pre">
+              <code>{trimmed}</code>
+            </pre>
+          </div>
+        )
+      }
+
+      return (
+        <p key={pIdx} className="doc-paragraph">
+          {renderFormattedParagraph(trimmed, marked)}
+        </p>
+      )
+    })
+  }, [body, marked])
+
+  return <>{rendered}</>
 }
 
 export function Desk() {
@@ -165,11 +295,11 @@ export function Desk() {
   async function saveUrl(event: React.FormEvent) {
     event.preventDefault()
     if (!online) {
-      setError('Saving a new document needs a connection. Pages already on this computer still open.')
+      setError('Saving a new document needs an active connection. Already saved documents still open.')
       return
     }
     if (!url.trim()) {
-      setError('Paste the documentation URL.')
+      setError('Paste a documentation URL first.')
       return
     }
     setBusy('import')
@@ -212,7 +342,7 @@ export function Desk() {
   function checkPractice() {
     if (!builtIn) return
     const missing = builtIn.practice.checks.find((item) => !code.includes(item.includes))
-    setCheckNote(missing ? missing.message : 'The pieces are in the file. Read them back before you call this done.')
+    setCheckNote(missing ? missing.message : 'The required pieces are present in the file. Read through before moving on.')
   }
 
   async function runExample() {
@@ -265,7 +395,7 @@ export function Desk() {
   async function writePlan() {
     if (!project) return
     if (!online || !hasKey) {
-      setError('A new plan needs a connection and an API key. A plan already saved still opens.')
+      setError('A new plan needs a connection and an API key. An already saved plan still opens.')
       return
     }
     setBusy('plan')
@@ -315,238 +445,321 @@ export function Desk() {
   return (
     <div className="desk">
       <a className="skip" href="#document">
-        Skip to the document
+        Skip to main content
       </a>
-      <aside className="shelf">
+
+      {/* LEFT SIDEBAR: SHELF */}
+      <aside className="shelf" aria-label="Documentation shelf">
         <header className="desk-brand">
-          <h1>Gladian</h1>
-          <p>Read a library, then try one small piece of it.</p>
+          <div className="desk-brand-header">
+            <h1>
+              <BookOpen size={20} color="#22c55e" />
+              Gladian
+            </h1>
+            <span className="badge">v0.1.0</span>
+          </div>
+          <p>Read the documentation, then write every line of practice yourself.</p>
         </header>
-        <h2>Documents</h2>
-        {CATALOG.map((library) => (
-          <button key={library.id} className="file" type="button" aria-current={builtIn?.id === library.id ? 'true' : undefined} onClick={() => openLibrary(library)}>
-            <strong>{library.name}</strong>
-          </button>
-        ))}
-        {imported.length > 0 && <h2>Saved from a URL</h2>}
-        {imported.map((library) => {
-          const isSimplified = Boolean(library.modules && library.modules.length > 0)
+
+        <h2 className="shelf-heading">Built-in Guides</h2>
+        {CATALOG.map((library) => {
+          const isSelected = builtIn?.id === library.id
           return (
-            <button key={library.id} className="file" type="button" aria-current={added?.id === library.id ? 'true' : undefined} onClick={() => openLibrary(library)}>
+            <button
+              key={library.id}
+              className={`shelf-btn ${isSelected ? 'active' : ''}`}
+              type="button"
+              aria-current={isSelected ? 'true' : undefined}
+              onClick={() => openLibrary(library)}
+            >
               <strong>{library.name}</strong>
-              <span className="muted">{isSimplified ? 'AI Guide · Offline' : `${library.articles.length} raw pages`}</span>
+              <span className="shelf-btn-tag">Guide</span>
             </button>
           )
         })}
-        <form className="stack add-doc" onSubmit={(event) => void saveUrl(event)}>
-          <h2>Add documentation</h2>
+
+        {imported.length > 0 && <h2 className="shelf-heading">Saved from URL</h2>}
+        {imported.map((library) => {
+          const isSelected = added?.id === library.id
+          const isSimplified = Boolean(library.modules && library.modules.length > 0)
+          return (
+            <button
+              key={library.id}
+              className={`shelf-btn ${isSelected ? 'active' : ''}`}
+              type="button"
+              aria-current={isSelected ? 'true' : undefined}
+              onClick={() => openLibrary(library)}
+            >
+              <strong>{library.name}</strong>
+              <span className="shelf-btn-tag">{isSimplified ? 'AI Guide' : `${library.articles.length}p`}</span>
+            </button>
+          )
+        })}
+
+        <form className="shelf-form" onSubmit={(event) => void saveUrl(event)}>
+          <h2 className="shelf-heading" style={{ margin: '0 0 4px' }}>Add Documentation</h2>
           <label>
             Docs URL
-            <input type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://" />
+            <input
+              type="url"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://docs.example.com"
+              autoComplete="off"
+              spellCheck={false}
+            />
           </label>
-          <label className="check">
-            <input type="checkbox" checked={crawl} onChange={(event) => setCrawl(event.target.checked)} /> Include up to 30 nearby pages
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '8px', fontWeight: 400, cursor: 'pointer' }}>
+            <input type="checkbox" checked={crawl} onChange={(event) => setCrawl(event.target.checked)} />
+            Include up to 30 nearby pages
           </label>
-          <button className="btn" type="submit" disabled={!online || busy === 'import'}>
-            {busy === 'import' ? 'Saving…' : 'Save for offline'}
+          <button className="shelf-btn-submit" type="submit" disabled={!online || busy === 'import'}>
+            {busy === 'import' ? 'Saving…' : 'Save for Offline'}
           </button>
-          {!online && <p className="help">Pages already saved still open. A new URL waits for a connection.</p>}
+          {!online && <span style={{ fontSize: '11px', color: '#626c77' }}>Adding a new URL needs an active connection.</span>}
         </form>
-        <h2>Projects</h2>
-        {projects.map((item) => (
-          <button key={item.id} className="file" type="button" aria-current={project?.id === item.id ? 'true' : undefined} onClick={() => setSelection({ kind: 'project', id: item.id })}>
-            <strong>{item.name}</strong>
-            <span className="muted">{item.libraryIds.join(', ')}</span>
-          </button>
-        ))}
-        <form className="stack add-doc" onSubmit={(event) => void createProject(event)}>
+
+        <h2 className="shelf-heading">Projects</h2>
+        {projects.map((item) => {
+          const isSelected = project?.id === item.id
+          return (
+            <button
+              key={item.id}
+              className={`shelf-btn ${isSelected ? 'active' : ''}`}
+              type="button"
+              aria-current={isSelected ? 'true' : undefined}
+              onClick={() => setSelection({ kind: 'project', id: item.id })}
+            >
+              <strong>{item.name}</strong>
+              <span className="shelf-btn-tag">{item.libraryIds.length} libs</span>
+            </button>
+          )
+        })}
+
+        <form className="shelf-form" onSubmit={(event) => void createProject(event)}>
+          <h2 className="shelf-heading" style={{ margin: '0 0 4px' }}>New Study Project</h2>
           <label>
-            Project name
-            <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
+            Project Name
+            <input value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="e.g. My API Server" />
           </label>
           <label>
             What you are building
-            <textarea value={projectSummary} onChange={(event) => setProjectSummary(event.target.value)} rows={3} />
+            <textarea
+              value={projectSummary}
+              onChange={(event) => setProjectSummary(event.target.value)}
+              rows={2}
+              placeholder="Short description of your goal"
+            />
           </label>
-          <fieldset>
-            <legend>Documentation this project uses</legend>
-            {CATALOG.map((library) => (
-              <label key={library.id} className="check">
-                <input
-                  type="checkbox"
-                  checked={projectLibs.includes(library.id)}
-                  onChange={(event) =>
-                    setProjectLibs((current) => (event.target.checked ? [...current, library.id] : current.filter((id) => id !== library.id)))
-                  }
-                />
-                {library.name}
-              </label>
-            ))}
-          </fieldset>
-          <button className="btn" type="submit" disabled={busy === 'project'}>
-            Create project
+          <button className="shelf-btn-submit" type="submit" disabled={busy === 'project'}>
+            Create Project
           </button>
         </form>
       </aside>
+
+      {/* CENTER: READER */}
       <main className="reader" id="document">
         {project ? (
-          <article className="page measure">
-            <h2>{project.name}</h2>
-            <p>{project.summary || 'A project that studies the documents you attached.'}</p>
-            {project.steps.length === 0 ? (
-              <p>No plan is saved yet. Draft one while you are online, then it stays on this computer.</p>
-            ) : (
-              <ol className="plan">
-                {project.steps.map((step) => (
-                  <li key={`${step.docId}-${step.title}`}>
-                    <h3>{step.title}</h3>
-                    <p>{step.detail}</p>
-                    <button
-                      className="ghost"
-                      type="button"
-                      onClick={() => {
-                        const library = CATALOG.find((item) => item.id === step.libraryId)
-                        if (!library) return
-                        openLibrary(library)
-                        setPageId(step.docId || library.pages[0].id)
-                      }}
-                    >
-                      Open {step.libraryId || 'the document'}
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </article>
+          <div className="reader-body">
+            <p className="reader-eyebrow">Study Project</p>
+            <h1 className="reader-title">{project.name}</h1>
+            <p className="reader-desc">{project.summary || 'A project that guides you through your attached documentation.'}</p>
+            <div style={{ marginTop: '24px' }}>
+              {project.steps.length === 0 ? (
+                <p className="doc-paragraph" style={{ color: '#8b949e' }}>
+                  No plan is saved yet. Draft one while online using your API key, then study it completely offline.
+                </p>
+              ) : (
+                <ol style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {project.steps.map((step) => (
+                    <li key={`${step.docId}-${step.title}`} style={{ color: '#f0f6fc' }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 600 }}>{step.title}</h3>
+                      <p style={{ margin: '0 0 8px', fontSize: '14px', color: '#8b949e' }}>{step.detail}</p>
+                      <button
+                        className="guide-action-btn"
+                        type="button"
+                        onClick={() => {
+                          const library = CATALOG.find((item) => item.id === step.libraryId)
+                          if (!library) return
+                          openLibrary(library)
+                          setPageId(step.docId || library.pages[0].id)
+                        }}
+                      >
+                        <ExternalLink size={12} />
+                        Open {step.libraryId || 'the document'}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
         ) : pages.length > 0 ? (
-          <article className="page" key={builtIn?.id ?? added?.id}>
-            <p className="eyebrow">
-              {builtIn
-                ? builtIn.name
-                : added?.modules && added.modules.length > 0 && showSimplified
-                ? `${added.name} · AI Simplified Guide`
-                : `${added?.name} · Raw Documentation`}
-            </p>
-            <h2>{builtIn?.name ?? added?.name}</h2>
-            <p>
-              {builtIn?.summary ??
-                (added?.modules && added.modules.length > 0 && showSimplified
-                  ? `Structured learning modules with runnable code snippets generated from ${added.sourceUrl || 'documentation'}. Cached offline.`
-                  : `Saved raw documentation pages from ${added?.sourceUrl || 'URL'}. Cached on this computer.`)}
-            </p>
-            <nav className="module-nav" aria-label="Modules">
-              {activeModules.map((module) => (
-                <a key={module.id} href={`#${module.id}`}>
-                  {module.title}
-                </a>
-              ))}
-            </nav>
-            {activeModules.map((module) => (
-              <section key={module.id} id={module.id} className="module">
-                <h2>{module.title}</h2>
-                {module.sections.map((item) => {
-                  const currentLibId = builtIn?.id ?? added?.id ?? ''
-                  const marked = highlights.filter((entry) => entry.libraryId === currentLibId && entry.sectionId === item.id).map((entry) => entry.text)
-                  const saved = bookmarks.some((entry) => entry.libraryId === currentLibId && entry.sectionId === item.id)
-                  return (
-                    <section className="guide-block" id={item.id} key={item.id}>
-                      <div className="guide-tools">
-                        <h3>{item.title}</h3>
-                        <button
-                          className="ghost"
-                          type="button"
-                          onClick={() => {
-                            const next = toggleBookmark({ libraryId: currentLibId, sectionId: item.id, title: `${builtIn?.name ?? added?.name}: ${item.title}` })
-                            setBookmarks(next.bookmarks)
-                          }}
-                        >
-                          {saved ? 'Bookmarked' : 'Bookmark'}
-                        </button>
-                        <button
-                          className="ghost"
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => {
-                            const text = window.getSelection()?.toString() ?? ''
-                            const next = addHighlight({ libraryId: currentLibId, sectionId: item.id, text })
-                            setHighlights(next.highlights)
-                          }}
-                        >
-                          Highlight
-                        </button>
-                      </div>
-                      {item.body.split('\n\n').map((paragraph, pIdx) => {
-                        const trimmed = paragraph.trim()
-                        if (trimmed.startsWith('```') && trimmed.endsWith('```')) {
-                          const lines = trimmed.split('\n')
-                          const codeBody = lines.slice(1, lines.length - 1).join('\n')
-                          return (
-                            <pre key={pIdx}>
-                              <code>{codeBody}</code>
-                            </pre>
-                          )
-                        }
-                        return (
-                          <p key={pIdx}>
-                            {paint(paragraph, marked).map((part, index) =>
-                              typeof part === 'string' ? <span key={index}>{part}</span> : <mark key={index}>{part.mark}</mark>
-                            )}
-                          </p>
-                        )
-                      })}
-                      <p className="try-line">{item.tryIt}</p>
-                    </section>
-                  )
-                })}
-              </section>
-            ))}
-            {builtIn && (
-              <p className="help">
-                Written for this desk so you can study {builtIn.name} offline. The official site is still{' '}
-                <a href={builtIn.docsUrl} target="_blank" rel="noreferrer">
-                  here
-                </a>
-                .
+          <>
+            {/* Sticky Header with Title and Scrollable Module Navigation */}
+            <div className="reader-header">
+              <p className="reader-eyebrow">
+                <FileCode2 size={14} />
+                {builtIn
+                  ? `${builtIn.name} Reference`
+                  : added?.modules && added.modules.length > 0 && showSimplified
+                  ? `${added.name} · AI Simplified Guide`
+                  : `${added?.name} · Raw Documentation`}
               </p>
-            )}
-          </article>
+              <h1 className="reader-title">{builtIn?.name ?? added?.name}</h1>
+              <p className="reader-desc">
+                {builtIn?.summary ??
+                  (added?.modules && added.modules.length > 0 && showSimplified
+                    ? `Structured learning modules with code examples generated from ${added.sourceUrl || 'documentation'}. Cached offline.`
+                    : `Saved raw documentation pages from ${added?.sourceUrl || 'URL'}. Cached on this computer.`)}
+              </p>
+              <nav className="module-nav" aria-label="Modules navigation">
+                {activeModules.map((module) => (
+                  <a key={module.id} href={`#${module.id}`} className="module-nav-pill">
+                    {module.title}
+                  </a>
+                ))}
+              </nav>
+            </div>
+
+            {/* Document Body */}
+            <div className="reader-body">
+              {activeModules.map((module) => (
+                <section key={module.id} id={module.id} className="module">
+                  <h2 className="module-header">{module.title}</h2>
+                  {module.sections.map((item) => {
+                    const currentLibId = builtIn?.id ?? added?.id ?? ''
+                    const marked = highlights
+                      .filter((entry) => entry.libraryId === currentLibId && entry.sectionId === item.id)
+                      .map((entry) => entry.text)
+                    const saved = bookmarks.some((entry) => entry.libraryId === currentLibId && entry.sectionId === item.id)
+
+                    return (
+                      <article className="guide-block" id={item.id} key={item.id}>
+                        <div className="guide-tools">
+                          <h3>{item.title}</h3>
+                          <div className="guide-actions">
+                            <button
+                              className={`guide-action-btn ${saved ? 'active' : ''}`}
+                              type="button"
+                              onClick={() => {
+                                const next = toggleBookmark({
+                                  libraryId: currentLibId,
+                                  sectionId: item.id,
+                                  title: `${builtIn?.name ?? added?.name}: ${item.title}`
+                                })
+                                setBookmarks(next.bookmarks)
+                              }}
+                            >
+                              <BookmarkIcon size={12} />
+                              {saved ? 'Bookmarked' : 'Bookmark'}
+                            </button>
+                            <button
+                              className="guide-action-btn"
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                const text = window.getSelection()?.toString() ?? ''
+                                const next = addHighlight({ libraryId: currentLibId, sectionId: item.id, text })
+                                setHighlights(next.highlights)
+                              }}
+                            >
+                              Highlight
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Beautifully Formatted Markdown Content */}
+                        <DocContent body={item.body} marked={marked} />
+
+                        {/* Try It Callout */}
+                        {item.tryIt && (
+                          <div className="try-callout">
+                            <Zap size={16} className="try-callout-icon" />
+                            <p className="try-callout-text">
+                              <strong>Try this:</strong> {item.tryIt}
+                            </p>
+                          </div>
+                        )}
+                      </article>
+                    )
+                  })}
+                </section>
+              ))}
+
+              {builtIn && (
+                <p style={{ marginTop: '40px', fontSize: '13px', color: '#656d76', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
+                  Authored for Gladian so you can master {builtIn.name} offline. Official reference is available at{' '}
+                  <a href={builtIn.docsUrl} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>
+                    {builtIn.docsUrl}
+                  </a>
+                  .
+                </p>
+              )}
+            </div>
+          </>
         ) : (
-          <article className="page">
-            <h2>Choose a document</h2>
-            <p>The shelf keeps the libraries that ship with Gladian, and any pages you save from a URL.</p>
-          </article>
+          <div className="reader-body">
+            <h2 className="reader-title">Select a Document</h2>
+            <p className="reader-desc">Choose a guide from the shelf on the left, or add a custom docs URL for offline study.</p>
+          </div>
         )}
       </main>
-      <aside className="practice">
+
+      {/* RIGHT SIDEBAR: PRACTICE & TOOLS */}
+      <aside className="practice" aria-label="Practice and tools">
         {project ? (
-          <div className="stack">
-            <h2>Plan and reading</h2>
-            <p>The plan points at documents on this computer. The reading note looks at a folder you attach and does not change it.</p>
-            <button className="btn" type="button" disabled={busy === 'plan'} onClick={() => void writePlan()}>
-              {busy === 'plan' ? 'Drafting…' : 'Draft an offline plan'}
+          <div className="practice-section">
+            <h3>Project Coaching</h3>
+            <p>Draft an offline study plan or attach a local folder to scan against documentation patterns.</p>
+            <div className="practice-actions">
+              <button
+                className="practice-btn-primary"
+                type="button"
+                disabled={busy === 'plan'}
+                onClick={() => void writePlan()}
+              >
+                <Sparkles size={14} />
+                {busy === 'plan' ? 'Drafting…' : 'Draft Offline Plan'}
+              </button>
+            </div>
+            <button
+              className="practice-btn-secondary"
+              type="button"
+              disabled={busy === 'review'}
+              onClick={() => void attachFolder()}
+            >
+              <FolderCode size={14} />
+              {busy === 'review' ? 'Reading…' : 'Scan Sample Folder'}
             </button>
-            <button className="ghost" type="button" disabled={busy === 'review'} onClick={() => void attachFolder()}>
-              {busy === 'review' ? 'Reading the folder…' : 'Attach a sample folder'}
-            </button>
-            {!online && <p className="help">A new plan or reading needs a connection. What is already saved still opens.</p>}
             {project.note && (
-              <section className="flat">
-                <h3>What matches the docs</h3>
-                <p>{project.note.matches}</p>
-                <h3>One weak pattern</h3>
-                <p>{project.note.weakPattern}</p>
-                <h3>Practice this</h3>
-                <p>{project.note.practice}</p>
-              </section>
+              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="practice-note">
+                  <strong>Matches:</strong> {project.note.matches}
+                </div>
+                <div className="practice-error">
+                  <strong>Weak pattern:</strong> {project.note.weakPattern}
+                </div>
+                <div className="practice-note" style={{ color: '#38bdf8', borderColor: 'rgba(56,189,248,0.3)', background: 'rgba(56,189,248,0.08)' }}>
+                  <strong>Practice:</strong> {project.note.practice}
+                </div>
+              </div>
             )}
-            <button className="ghost" type="button" onClick={() => setKeyOpen(true)}>
-              {hasKey ? 'API key saved' : 'Add API key'}
+            <button
+              className="practice-btn-secondary"
+              style={{ marginTop: '8px' }}
+              type="button"
+              onClick={() => setKeyOpen(true)}
+            >
+              <Key size={13} />
+              {hasKey ? 'API Key Configured' : 'Configure API Key'}
             </button>
           </div>
         ) : builtIn ? (
-          <div className="stack">
+          <>
+            {/* Error Explainer Card */}
             <form
-              className="stack"
+              className="practice-section"
               onSubmit={(event) => {
                 event.preventDefault()
                 const next = explainError(
@@ -557,157 +770,239 @@ export function Desk() {
                 if (next) document.getElementById(next.pageId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
               }}
             >
-              <label>
-                Paste an error
-                <textarea value={pasted} onChange={(event) => setPasted(event.target.value)} rows={4} placeholder="The message from the terminal or the browser" />
-              </label>
-              <button className="btn" type="submit">
-                Explain from the guide
+              <h3>Error Explainer</h3>
+              <p>Paste a terminal or browser error to lookup the matching documentation.</p>
+              <textarea
+                value={pasted}
+                onChange={(event) => setPasted(event.target.value)}
+                rows={3}
+                placeholder="Paste the error message here…"
+                spellCheck={false}
+                style={{
+                  background: '#080c10',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: '6px',
+                  color: '#f0f6fc',
+                  fontSize: '13px',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  padding: '8px 10px',
+                  resize: 'vertical'
+                }}
+              />
+              <button className="practice-btn-secondary" type="submit">
+                Explain from Guide
               </button>
-              <p className="help">This stays on this computer. It matches your message to the open guide.</p>
+              {note && (
+                <div className="practice-note" style={{ marginTop: '6px' }}>
+                  <strong>{note.title}:</strong> {note.why}
+                </div>
+              )}
             </form>
-            {note && (
-              <section className="flat">
-                <h3>Why this happened</h3>
-                <p>{note.why}</p>
-                <p>Related guide: {note.title}</p>
-              </section>
-            )}
+
+            {/* Bookmarks Section */}
             {bookmarks.filter((item) => item.libraryId === builtIn.id).length > 0 && (
-              <section className="flat">
+              <div className="practice-section">
                 <h3>Bookmarks</h3>
-                {bookmarks
-                  .filter((item) => item.libraryId === builtIn.id)
-                  .map((item) => (
-                    <button key={item.sectionId} className="ghost" type="button" onClick={() => document.getElementById(item.sectionId)?.scrollIntoView({ block: 'start' })}>
-                      {item.title}
-                    </button>
-                  ))}
-              </section>
-            )}
-            <h2>{builtIn.practice.title}</h2>
-            <p>{builtIn.practice.brief}</p>
-            <button className="btn" type="button" onClick={() => setTrying((current) => !current)}>
-              {trying ? 'Close the try area' : 'Try this'}
-            </button>
-            {trying && (
-              <div className="try">
-                <p className="help">{builtIn.practice.fileName}</p>
-                <Editor
-                  height="240px"
-                  language={builtIn.practice.language === 'python' ? 'python' : 'javascript'}
-                  theme="vs-dark"
-                  value={code}
-                  onChange={(value) => setCode(value ?? '')}
-                  options={{ minimap: { enabled: false }, fontSize: 14, wordWrap: 'on', scrollBeyondLastLine: false }}
-                />
-                <button className="ghost" type="button" onClick={checkPractice}>
-                  Check the pieces
-                </button>
-                {builtIn.practice.language === 'python' && (
-                  <button className="ghost" type="button" disabled={busy === 'run'} onClick={() => void runExample()}>
-                    {busy === 'run' ? 'Running…' : 'Run with Python'}
-                  </button>
-                )}
-                {(builtIn.practice.language === 'html' || code.includes('<')) && (
-                  <iframe className="try-preview" title="Example preview" sandbox="allow-scripts" srcDoc={builtIn.practice.language === 'html' ? preview : code} />
-                )}
-                {checkNote && <p className="ok">{checkNote}</p>}
-                {output && <pre>{output}</pre>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {bookmarks
+                    .filter((item) => item.libraryId === builtIn.id)
+                    .map((item) => (
+                      <button
+                        key={item.sectionId}
+                        className="shelf-btn"
+                        style={{ padding: '6px 8px', fontSize: '13px' }}
+                        type="button"
+                        onClick={() => document.getElementById(item.sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      >
+                        {item.title}
+                      </button>
+                    ))}
+                </div>
               </div>
             )}
-          </div>
+
+            {/* Interactive Monaco Editor Practice */}
+            <div className="practice-section">
+              <h3>{builtIn.practice.title}</h3>
+              <p>{builtIn.practice.brief}</p>
+              <button
+                className={trying ? 'practice-btn-secondary' : 'practice-btn-primary'}
+                type="button"
+                onClick={() => setTrying((current) => !current)}
+              >
+                {trying ? 'Close Editor' : 'Open Practice Editor'}
+              </button>
+
+              {trying && (
+                <div>
+                  <div className="practice-editor-wrap">
+                    <div className="practice-editor-bar">
+                      <span>{builtIn.practice.fileName}</span>
+                      <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#656d76' }}>
+                        {builtIn.practice.language}
+                      </span>
+                    </div>
+                    <Editor
+                      height="230px"
+                      language={builtIn.practice.language === 'python' ? 'python' : 'javascript'}
+                      theme="vs-dark"
+                      value={code}
+                      onChange={(value) => setCode(value ?? '')}
+                      options={{
+                        minimap: { enabled: false },
+                        fontSize: 13.5,
+                        wordWrap: 'on',
+                        scrollBeyondLastLine: false,
+                        padding: { top: 8, bottom: 8 },
+                        lineNumbersMinChars: 3
+                      }}
+                    />
+                  </div>
+
+                  <div className="practice-actions">
+                    <button className="practice-btn-secondary" type="button" onClick={checkPractice}>
+                      Check Code
+                    </button>
+                    {builtIn.practice.language === 'python' && (
+                      <button
+                        className="practice-btn-primary"
+                        type="button"
+                        disabled={busy === 'run'}
+                        onClick={() => void runExample()}
+                      >
+                        <Play size={13} />
+                        {busy === 'run' ? 'Running…' : 'Run Python'}
+                      </button>
+                    )}
+                  </div>
+
+                  {(builtIn.practice.language === 'html' || code.includes('<')) && (
+                    <iframe
+                      style={{
+                        width: '100%',
+                        height: '140px',
+                        border: '1px solid var(--border-default)',
+                        borderRadius: '6px',
+                        background: '#ffffff',
+                        marginTop: '8px'
+                      }}
+                      title="Practice preview"
+                      sandbox="allow-scripts"
+                      srcDoc={builtIn.practice.language === 'html' ? preview : code}
+                    />
+                  )}
+
+                  {checkNote && <div className="practice-note" style={{ marginTop: '8px' }}>{checkNote}</div>}
+                  {output && <pre className="practice-output">{output}</pre>}
+                </div>
+              )}
+            </div>
+          </>
         ) : added ? (
-          <div className="stack">
-            <h2>{added.name}</h2>
-            <p>Saved from {added.sourceUrl || 'URL'}. Available offline.</p>
+          <div className="practice-section">
+            <h3>{added.name}</h3>
+            <p>Saved from {added.sourceUrl || 'URL'}. Cached on this computer.</p>
             {added.modules && added.modules.length > 0 ? (
-              <section className="flat">
-                <h3>AI Simplified Guide</h3>
-                <p className="ok">Simplified with AI & cached offline.</p>
-                <div style={{ display: 'flex', gap: '8px', margin: '8px 0' }}>
+              <div>
+                <p style={{ color: '#4ade80', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={14} /> Simplified & cached offline
+                </p>
+                <div style={{ display: 'flex', gap: '6px', margin: '10px 0' }}>
                   <button
-                    className={showSimplified ? 'btn' : 'ghost'}
+                    className={showSimplified ? 'practice-btn-primary' : 'practice-btn-secondary'}
                     type="button"
                     onClick={() => setShowSimplified(true)}
                   >
                     Simplified Guide
                   </button>
                   <button
-                    className={!showSimplified ? 'btn' : 'ghost'}
+                    className={!showSimplified ? 'practice-btn-primary' : 'practice-btn-secondary'}
                     type="button"
                     onClick={() => setShowSimplified(false)}
                   >
-                    Raw Pages ({added.articles.length})
+                    Raw ({added.articles.length}p)
                   </button>
                 </div>
                 {online && hasKey && (
                   <button
-                    className="ghost"
+                    className="practice-btn-secondary"
                     type="button"
                     disabled={busy === 'simplify'}
                     onClick={() => void handleSimplify()}
                   >
-                    {busy === 'simplify' ? 'Re-simplifying with AI…' : 'Re-simplify with AI'}
+                    <RefreshCw size={13} />
+                    {busy === 'simplify' ? 'Re-simplifying…' : 'Re-simplify with AI'}
                   </button>
                 )}
-              </section>
+              </div>
             ) : (
-              <section className="flat">
-                <h3>AI Simplification</h3>
-                <p>This documentation currently has {added.articles.length} raw scraped page{added.articles.length === 1 ? '' : 's'}. Use your Claude API key to convert them into structured, easy-to-read learning modules with code snippets and exercises.</p>
+              <div>
+                <p style={{ fontSize: '13px', color: '#8b949e', margin: '0 0 10px' }}>
+                  Contains {added.articles.length} raw scraped pages. Convert them into structured lessons with runnable code examples.
+                </p>
                 <button
-                  className="btn"
+                  className="practice-btn-primary"
                   type="button"
                   disabled={!online || !hasKey || busy === 'simplify'}
                   onClick={() => void handleSimplify()}
                 >
+                  <Sparkles size={14} />
                   {busy === 'simplify' ? 'Simplifying with AI…' : 'Simplify with AI'}
                 </button>
                 {!hasKey && (
-                  <p className="help">
-                    Add an API key below to unlock AI documentation simplification.
+                  <p style={{ fontSize: '11px', color: '#656d76', marginTop: '6px' }}>
+                    Add an API key below to enable AI simplification.
                   </p>
                 )}
-                {!online && (
-                  <p className="help">
-                    Simplification requires internet access. Once converted, the guide works offline.
-                  </p>
-                )}
-              </section>
+              </div>
             )}
-            <button className="ghost" type="button" onClick={() => setKeyOpen(true)}>
-              {hasKey ? 'API key saved' : 'Add API key'}
+            <button
+              className="practice-btn-secondary"
+              style={{ marginTop: '10px' }}
+              type="button"
+              onClick={() => setKeyOpen(true)}
+            >
+              <Key size={13} />
+              {hasKey ? 'API Key Saved' : 'Add API Key'}
             </button>
           </div>
         ) : (
-          <div className="stack">
-            <h2>Saved pages</h2>
-            <p>This document was saved from a URL. It stays readable offline.</p>
+          <div className="practice-section">
+            <h3>Documentation Tools</h3>
+            <p>Select a guide to view exercises, bookmarks, and error lookup.</p>
           </div>
         )}
-        {error && <p className="error">{error}</p>}
+
+        {error && <div className="practice-error">{error}</div>}
       </aside>
-      <footer className="status">
-        <span>{online ? 'Online. New documents can be saved.' : 'Offline. Saved documents still open.'}</span>
+
+      {/* FOOTER: STATUS BAR */}
+      <footer className="status" role="contentinfo">
+        <div className="status-indicator">
+          <span className={`status-dot ${online ? '' : 'offline'}`} />
+          <span>{online ? 'Online (Ready to save URLs)' : 'Offline (Saved docs active)'}</span>
+        </div>
+
         {progress && busy === 'import' ? (
-          <span className="meter-wrap">
-            <span className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
+          <div className="meter-wrap">
+            <div className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
               <span style={{ width: `${fraction}%` }} />
-            </span>
+            </div>
             <span>
-              Saving {progress.title}, page {progress.done} of {progress.total}
+              Saving {progress.title}: page {progress.done} of {progress.total}
             </span>
-          </span>
+          </div>
         ) : busy === 'simplify' ? (
-          <span>Simplifying documentation with AI… this may take a moment</span>
+          <span style={{ color: '#38bdf8' }}>Simplifying documentation with AI… this may take a moment</span>
         ) : (
           <span>{page?.title ?? project?.name ?? 'Gladian'}</span>
         )}
       </footer>
+
+      {/* API KEY CONFIGURATION MODAL */}
       {keyOpen && (
         <form
-          className="key-sheet stack"
+          className="key-sheet"
           onSubmit={(event) => {
             event.preventDefault()
             void saveApiKey(apiKey)
@@ -719,25 +1014,36 @@ export function Desk() {
               .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'The key was not saved.'))
           }}
         >
-          <h2>API key</h2>
-          <p>The key stays on this computer. Plans, reading notes, and AI doc simplification need it. Saved documents open without it.</p>
-          <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" />
-          <button className="btn" type="submit">
-            Save key
-          </button>
-          <button
-            className="ghost"
-            type="button"
-            onClick={() => {
-              void forgetApiKey().then(() => setHasKey(false))
-              setKeyOpen(false)
-            }}
-          >
-            Remove key
-          </button>
-          <button className="ghost" type="button" onClick={() => setKeyOpen(false)}>
-            Close
-          </button>
+          <h2>Configure Anthropic API Key</h2>
+          <p>
+            Your API key stays encrypted locally on this computer. It powers AI doc simplification and study plans.
+          </p>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder="sk-ant-api..."
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <div className="key-sheet-actions">
+            <button className="practice-btn-primary" type="submit">
+              Save Key
+            </button>
+            <button
+              className="practice-btn-secondary"
+              type="button"
+              onClick={() => {
+                void forgetApiKey().then(() => setHasKey(false))
+                setKeyOpen(false)
+              }}
+            >
+              Remove
+            </button>
+            <button className="practice-btn-secondary" type="button" onClick={() => setKeyOpen(false)}>
+              Cancel
+            </button>
+          </div>
         </form>
       )}
     </div>
