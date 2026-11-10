@@ -1,190 +1,74 @@
-# Gladian 🛡️✨
+# Gladian
 
-> **An offline-first, pedagogical desktop IDE where the learner writes every line of the lesson.**  
-> *Built for Hack Club Crescent (YSWS).*
+An offline desk for reading programming documentation and practicing one small piece of it yourself. The app does not write the practice file for you.
 
-[![Live Web App](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-22c55e.svg)](https://evinjsubin.github.io/Gladian/)
-[![Windows Executable](https://img.shields.io/badge/Download-Windows%20.exe-0ea5e9.svg)](https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
-[![Tauri](https://img.shields.io/badge/Tauri-v2-FFC131.svg)](https://tauri.app/)
+![Gladian open on the Flask guide](docs/gladian-desk.png)
 
-### 🚀 Try It Now:
-- **🌐 Live Web App**: [https://evinjsubin.github.io/Gladian/](https://evinjsubin.github.io/Gladian/)
-- **💾 Windows Standalone .exe**: [Gladian.exe (v0.1.0 Release)](https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0)
-- **📦 Compressed Archive**: [Gladian-v0.1.0-windows-x64.zip](https://github.com/EVINJSUBIN/Gladian/releases/download/v0.1.0/Gladian-v0.1.0-windows-x64.zip)
+## Try it
 
----
+- Web, no install: https://evinjsubin.github.io/Gladian/
+- Windows app: https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0 (`Gladian.exe`, or the zip next to it)
 
-## 📖 The Philosophy: Active Practice vs. AI Autocomplete
+The web demo is the review copy. Open Flask, scroll the modules, bookmark a section, then paste this into **Error Explainer**:
 
-Modern beginner coders face a subtle trap: AI chatbots and copilot tools write whole blocks of code for them. Learners copy, paste, and run programs they do not understand, leaving them helpless when code breaks.
-
-**Gladian is designed around intentional, deliberate practice:**
-- **No code generation for learners**: The AI coach is explicitly restricted from generating replacement snippets or solution code.
-- **Praise first, guide second**: The deterministic coach detects what the learner built right, highlights syntax or DOM issues, and points to relevant documentation.
-- **Progressive Disclosure**: Advanced features (like formatting, find, project search, problem linters, split views, and terminal) are locked behind an **XP ladder**, encouraging learners to explore fundamentals first.
-- **100% Offline-Capable**: Built-in documentation, project guides, AST syntax checking, and search work completely without an internet connection.
-
----
-
-## 🚀 Key Features
-
-### 1. Progressive Disclosure & XP Mechanics
-Gladian rewards genuine effort. As learners read documentation, fix syntax bugs, and pass interactive steps, they unlock standard developer tools:
-- **50 XP**: Document Formatting (`formatDocument`)
-- **120 XP**: In-File Find (`Ctrl+F`)
-- **220 XP**: Multi-file Problems / Linter Panel
-- **360 XP**: Project-wide Full-text Search
-- **520 XP**: Split Editor View
-- **720 XP**: Sandboxed Embedded Terminal
-
-### 2. Dual-Tier Coaching Engine
-- **Deterministic Static Linter (`coach.ts` & `coach.rs`)**: Runs client-side Acorn AST parsing on JavaScript and HTML, validating tags, detecting missing `alt` attributes on images, catching `var` usage, and verifying event listeners.
-- **Pedagogical AI Explainer (`explain.ts`)**: When configured with an Anthropic API key, explains highlighted code in three concise sections (*encouragement*, *meaning*, *try next*) without giving away answers.
-
-### 3. Automated Headless DOM Probing
-Step verification doesn't just match strings. Gladian spins up an isolated, headless `<iframe>` probe that programmatically interacts with the learner's DOM (e.g., clicking `#roll` and asserting random bounds $1..6$, or adding a todo item and verifying list mutation) to verify runtime behavior.
-
-### 4. Comprehensive Offline Documentation & AI Simplification
-- **Extensive Built-in Guides**: Complete, offline-ready reference documentation with real code examples and commands for **Flask**, **Django**, **FastAPI**, **Pygame**, **Requests**, **Node.js**, and **Next.js**.
-- **URL Scraper & Raw Document Viewer**: Scrape documentation from any web URL directly into your offline library with raw page viewing.
-- **AI-Powered Simplification Engine**: With an Anthropic API key, transform raw scraped documentation into structured, easy-to-digest learning modules with real code snippets, key takeaways, and hands-on exercises.
-- **Offline Persistence**: Once simplified, all modules and raw articles are permanently saved to disk (`libraries/*.json`) so they remain fully accessible offline.
-
-### 5. Multi-Runtime Architecture
-Gladian supports both **Electron 37** (cross-platform desktop integration with OS `safeStorage`) and **Tauri v2** (ultra-lightweight Rust backend with native system dialogs and sandboxed scanning), as well as a standalone web mode with `localStorage` persistence.
-
----
-
-## 🔒 Security Audit & Hardening Changelog
-
-During development and security review, several critical vectors were identified and remediated to ensure safe local execution of untrusted learner code and external web docs:
-
-### 1. Filesystem Traversal & Path Normalization
-- **Vulnerability**: Potential directory traversal via crafted relative paths (e.g. `../../sensitive-file`).
-- **Mitigation**: Implemented an explicit `inside(root, target)` boundary assertion in `src/main/index.ts` using normalized path resolution. Any write or read operation attempting to escape the project root is rejected immediately.
-
-### 2. Cross-Platform Subprocess Hardening & Watchdogs
-- **Vulnerability**: Command execution freeze, runaway child processes, and buffer exhaustion in the project terminal.
-- **Mitigation**:
-  - Implemented cross-platform shell resolution (`powershell.exe` on Windows, `/bin/sh` or `$SHELL` on Unix).
-  - Enforced a hard **15-second watchdog timer** that automatically terminates stalled processes.
-  - Capped command inputs to 500 characters and truncated `stdout`/`stderr` output buffers at 20,000 characters to prevent UI lockup and memory exhaustion.
-
-### 3. Command Injection Defenses in Rust Backend (`src-tauri/src/lib.rs`)
-- **Vulnerability**: Arbitrary argument injection during package installation operations.
-- **Mitigation**: Created `valid_package(name: &str)` validating that package identifiers match strict ASCII alphanumeric characters and safe separators (`-`, `_`, `.`) with a max length of 64 characters before executing `pip`.
-
-### 4. OS-Level Encrypted Credential Management
-- **Vulnerability**: Plaintext storage of user LLM API keys in config files or local storage.
-- **Mitigation**: Encrypted all stored credentials using Electron's native `safeStorage` API (leveraging Windows DPAPI / macOS Keychain) stored in isolated system storage.
-
-### 5. DOM Isolation & Headless Runner Sandboxing
-- **Vulnerability**: Learner scripts causing infinite loops, accessing parent frame cookies, or crashing the IDE window during verification.
-- **Mitigation**: Step verification tests run inside sandboxed `<iframe>` instances with strict origin isolation and timeout traps that automatically abort verification if execution exceeds 1,200ms.
-
-### 6. Web Crawler Sanitization & Origin Boundaries
-- **Vulnerability**: Malicious scripts, SSRF, or data exfiltration during doc imports from arbitrary URLs.
-- **Mitigation**: Enforced HTTP/HTTPS scheme restrictions, validated `content-type` headers, restricted crawler link traversal to identical origin and pathname prefix, and stripped all `<script>`, `<style>`, and raw markup before indexing.
-
----
-
-## 🛠️ Tech Stack
-
-- **UI & Components**: [React 19](https://react.dev/), [Tailwind CSS v4](https://tailwindcss.com/), [Lucide Icons](https://lucide.dev/)
-- **Code Editor**: [Monaco Editor](https://microsoft.github.io/monaco-editor/) (`@monaco-editor/react`)
-- **Desktop Backends**: [Electron 37](https://www.electronjs.org/) + [Tauri v2](https://tauri.app/) (Rust)
-- **Language Parsers**: [Acorn](https://github.com/acornjs/acorn) (ECMAScript AST parser)
-- **Client Search**: [MiniSearch](https://github.com/lucaong/minisearch)
-- **AI Integration**: [@anthropic-ai/sdk](https://github.com/anthropics/anthropic-sdk-typescript) (Claude 3.5 Sonnet)
-
----
-
-## 📦 Project Structure
-
-```text
-Gladian/
-├── packs/                    # Bundled learning packs & projects
-│   ├── catalog.json          # Project registry (First Page, Dice Roller, Todo List)
-│   └── projects/             # Starter source files and step-by-step guides
-├── src/
-│   ├── main/                 # Electron main process (IPC, sandboxing, safeStorage)
-│   ├── preload/              # Secure contextBridge interface (`window.gladian`)
-│   └── renderer/             # React 19 Frontend application
-│       ├── components/       # Desk, FolderScan, LibrarySearch, UI elements
-│       ├── docs/             # Built-in offline documentation modules
-│       ├── coach.ts          # Deterministic AST linter & praise generator
-│       ├── explain.ts        # Controlled AI explanation client
-│       ├── marks.ts          # Highlighting & bookmarking engine
-│       └── api.ts            # Unified bridge for Tauri, Electron, and Web
-├── src-tauri/                # Tauri v2 Rust backend
-│   ├── src/                  # Memory-safe scanners, package validators, and coach
-│   └── tauri.conf.json       # Tauri window & security permissions config
-├── package.json
-└── vite.config.ts
+```
+404 Not Found: The requested URL was not found on the server.
 ```
 
----
+It should name the matching section in the guide. That match is local. It does not call a server.
 
-## ⚡ Getting Started
+## What is in the box
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or newer)
-- `npm` (v9 or newer)
-- *(Optional)* [Rust](https://rustup.rs/) if building the Tauri desktop application.
+Built-in guides, readable with the network off:
 
-### Installation
+- Flask
+- Django
+- FastAPI
+- Pygame
+- Requests
+- Node.js
+- Next.js
+
+Each guide is split into modules. A section can be bookmarked or highlighted. Those marks stay in the browser. Each library also has one practice file. You write it. Gladian checks for the constructs the exercise asked for. It does not fill in the solution.
+
+On the desktop app (`npm run dev`, or the `.exe`):
+
+- Paste a docs URL and save up to 30 pages from that same path as text.
+- Store an Anthropic key on this computer. The key is not sent back to the page.
+- Ask for a study plan that points at the local guides, or a short reading note on a folder you pick. The note does not edit the folder.
+- Optionally turn a saved URL into a shorter module list. The built-in guides already work without that.
+
+The web demo can read, bookmark, highlight, explain errors, and open the practice editor. Saving a project, importing a URL, and the AI calls need the desktop window.
+
+## Run it from source
+
+Node.js 20 or newer. Rust is only needed for the Tauri window.
 
 ```bash
-# Clone the repository
 git clone https://github.com/EVINJSUBIN/Gladian.git
 cd Gladian
-
-# Install dependencies
 npm install
-```
-
-### Development Modes
-
-```bash
-# Run web client in development
 npm run dev:web
-
-# Run Electron desktop app in development
-npm run dev:electron
-
-# Run Tauri desktop app in development
-npm run dev
-
-# Run TypeScript typechecks across node and web targets
-npm run typecheck
 ```
 
-### Production Builds
+Other commands:
 
-```bash
-# Build web production bundle
-npm run build:web
+- `npm run dev` — Tauri window
+- `npm run dev:electron` — Electron window
+- `npm run build:web` — static site in `dist/`
+- `npm run build` — native installer
+- `npm run typecheck`
 
-# Build Electron production application
-npm run build:electron
+## Layout
 
-# Build Tauri native binary
-npm run build
-```
+`src/renderer` is the desk. `src/renderer/src/docs` holds the built-in guides. `src-tauri` saves imported pages, runs the single practice file, and makes the optional model call. `src/main` is the Electron shell. `packs/` has three small project guides that are not the home screen.
 
----
+## AI
 
-## 📝 Hack Club Crescent Reviewer Notes
+A model is optional. The guides, bookmarks, highlights, error lookup, and practice check work with no key. When a key is saved in the desktop app, one call can draft a plan or a reading note. The prompt asks for steps and a note, not a finished program, and the app does not apply a patch to your folder.
 
-- **Hackatime Tracking**: Time logged under this project reflects the end-to-end engineering cycle: architectural redesign, migrating from Electron-only to hybrid Tauri/Electron/Web, implementing client-side AST inspection, writing sandboxed DOM verification runners, and conducting thorough security reviews.
-- **Code Authorship & AI Usage**: While LLMs were used for planning and scaffolding boilerplate interfaces, the core mechanics—deterministic Acorn parsing, security isolation boundaries, path traversal guards, subprocess sandboxing, and progressive unlock systems—were manually designed, coded, and verified.
-- **Verification**: You can test the application instantly via the [Live Web App](https://evinjsubin.github.io/Gladian/) or download the standalone Windows executable [Gladian.exe](https://github.com/EVINJSUBIN/Gladian/releases/tag/v0.1.0) without needing any local build environment. If running from source, execute `npm run dev:web` or `npm run dev`.
+I used coding tools while building Gladian. The desk, the guide text, and the offline error matching are in this repo for a reviewer to read.
 
----
+## License
 
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE) © 2026 Evin Jacob Subin.
+MIT. Copyright 2026 Evin Jacob Subin. See [LICENSE](LICENSE).
